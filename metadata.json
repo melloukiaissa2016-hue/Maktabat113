@@ -1,0 +1,8 @@
+{
+  "name": "Maktaba113 - مكتبة 113",
+  "description": "منصة Maktaba113 المتكاملة: متجر أدوات مدرسية ومكتبية، خدمات الطباعة والنسخ، مذكرات التخرج، عروض التوظيف وبنك الدروس مع لوحة تحكم إدارية شاملة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

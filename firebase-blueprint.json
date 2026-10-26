@@ -1,0 +1,254 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in the application",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string", "maxLength": 255 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "phone": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin access record for trusted role checking",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "maxLength": 255 },
+        "role": { "type": "string", "enum": ["admin"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Store item available for purchase",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "nameFr": { "type": "string", "maxLength": 200 },
+        "nameEn": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "category": { "type": "string", "maxLength": 100 },
+        "stock": { "type": "number" },
+        "imageUrl": { "type": "string", "maxLength": 2000 },
+        "featured": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "price", "category"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referenceCode": { "type": "string", "maxLength": 50 },
+        "customerUid": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "customerEmail": { "type": "string", "maxLength": 255 },
+        "deliveryMethod": { "type": "string", "enum": ["pickup", "delivery"] },
+        "deliveryAddress": { "type": "string", "maxLength": 500 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "deliveryFee": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["new", "processing", "ready", "completed", "cancelled"] },
+        "paymentMethod": { "type": "string", "enum": ["cash_on_delivery", "cash_in_store"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["referenceCode", "customerName", "customerPhone", "total", "status"]
+    },
+    "PrintRequest": {
+      "title": "PrintRequest",
+      "description": "Document printing and copying request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referenceCode": { "type": "string", "maxLength": 50 },
+        "customerUid": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "customerEmail": { "type": "string", "maxLength": 255 },
+        "files": { "type": "array" },
+        "copies": { "type": "number" },
+        "colorMode": { "type": "string", "enum": ["bw", "color"] },
+        "sidedness": { "type": "string", "enum": ["single", "double"] },
+        "paperSize": { "type": "string", "maxLength": 20 },
+        "pageRange": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "internalNotes": { "type": "string", "maxLength": 1000 },
+        "calculatedPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["new", "processing", "ready", "completed", "cancelled"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["referenceCode", "customerName", "customerPhone", "files", "status"]
+    },
+    "ResearchRequest": {
+      "title": "ResearchRequest",
+      "description": "Academic research and graduation thesis request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referenceCode": { "type": "string", "maxLength": 50 },
+        "customerUid": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "customerEmail": { "type": "string", "maxLength": 255 },
+        "title": { "type": "string", "maxLength": 300 },
+        "academicLevel": { "type": "string", "maxLength": 100 },
+        "specialty": { "type": "string", "maxLength": 100 },
+        "serviceType": { "type": "string", "maxLength": 100 },
+        "deadline": { "type": "string", "maxLength": 50 },
+        "files": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "internalNotes": { "type": "string", "maxLength": 1000 },
+        "calculatedPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["new", "processing", "ready", "completed", "cancelled"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["referenceCode", "customerName", "customerPhone", "title", "status"]
+    },
+    "JobOffer": {
+      "title": "JobOffer",
+      "description": "Recruitment announcement and employment advertisement",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 300 },
+        "organization": { "type": "string", "maxLength": 200 },
+        "position": { "type": "string", "maxLength": 200 },
+        "wilaya": { "type": "string", "maxLength": 100 },
+        "specialty": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 3000 },
+        "requirements": { "type": "string", "maxLength": 2000 },
+        "deadline": { "type": "string", "maxLength": 50 },
+        "officialLink": { "type": "string", "maxLength": 1000 },
+        "attachmentUrl": { "type": "string", "maxLength": 2000 },
+        "isNew": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "archived"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "organization", "status"]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "Educational resource, lesson, or exercise file",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 300 },
+        "level": { "type": "string", "maxLength": 100 },
+        "grade": { "type": "string", "maxLength": 100 },
+        "subject": { "type": "string", "maxLength": 100 },
+        "semester": { "type": "string", "maxLength": 20 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "fileUrl": { "type": "string", "maxLength": 2000 },
+        "fileName": { "type": "string", "maxLength": 255 },
+        "fileType": { "type": "string", "maxLength": 50 },
+        "fileSize": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "level", "subject"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global website configuration editable by admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "siteName": { "type": "string", "maxLength": 100 },
+        "siteNameAr": { "type": "string", "maxLength": 100 },
+        "logoUrl": { "type": "string", "maxLength": 2000 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "phoneWhatsApp": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 255 },
+        "address": { "type": "string", "maxLength": 300 },
+        "workingHours": { "type": "string", "maxLength": 200 },
+        "facebookUrl": { "type": "string", "maxLength": 500 },
+        "instagramUrl": { "type": "string", "maxLength": 500 },
+        "deliveryActive": { "type": "boolean" },
+        "deliveryPrice": { "type": "number" },
+        "sectionsConfig": { "type": "object" },
+        "retentionDays": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["siteName"]
+    },
+    "AdminLog": {
+      "title": "AdminLog",
+      "description": "Audit log for administrative operations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "adminEmail": { "type": "string", "maxLength": 255 },
+        "action": { "type": "string", "maxLength": 100 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["adminEmail", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection"
+    },
+    "/admins/{adminUid}": {
+      "schema": "Admin",
+      "description": "Trusted admin UID records"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Store products collection"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer purchase orders"
+    },
+    "/printRequests/{printId}": {
+      "schema": "PrintRequest",
+      "description": "Print and photocopy requests"
+    },
+    "/researchRequests/{researchId}": {
+      "schema": "ResearchRequest",
+      "description": "Research and graduation memo requests"
+    },
+    "/jobOffers/{jobId}": {
+      "schema": "JobOffer",
+      "description": "Employment and recruitment announcements"
+    },
+    "/lessons/{lessonId}": {
+      "schema": "Lesson",
+      "description": "Lesson and educational resource bank"
+    },
+    "/siteSettings/{settingId}": {
+      "schema": "SiteSettings",
+      "description": "Site settings and configuration"
+    },
+    "/adminLogs/{logId}": {
+      "schema": "AdminLog",
+      "description": "Administrative actions audit log"
+    }
+  }
+}

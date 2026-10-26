@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'mellouki.aissa2016@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Admins registry
+    match /admins/{adminUid} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Products (Public read for customers, admin write)
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Orders (Customer can create and view own orders, admin has full access)
+    match /orders/{orderId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
+      allow create: if true;
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        resource.data.customerUid == request.auth.uid && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+        request.resource.data.status == 'cancelled'
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Print Requests (Private to owner & admin)
+    match /printRequests/{printId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // Research Requests (Private to owner & admin)
+    match /researchRequests/{researchId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // Job Offers (Public read, admin write)
+    match /jobOffers/{jobId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Lessons Bank (Public read, admin write)
+    match /lessons/{lessonId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Site Settings (Public read, admin write)
+    match /siteSettings/{settingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Admin Logs (Admin read & append only)
+    match /adminLogs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}
