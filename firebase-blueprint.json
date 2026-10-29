@@ -207,6 +207,99 @@
         "timestamp": { "type": "string" }
       },
       "required": ["adminEmail", "action", "timestamp"]
+    },
+    "DocumentExtractionRequest": {
+      "title": "DocumentExtractionRequest",
+      "description": "Administrative document extraction request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referenceCode": { "type": "string", "maxLength": 50 },
+        "customerUid": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "customerEmail": { "type": "string", "maxLength": 255 },
+        "docType": { "type": "string", "maxLength": 100 },
+        "nationalId": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["new", "reviewing", "needs_info", "processing", "completed", "rejected"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["referenceCode", "customerName", "customerPhone", "customerEmail", "docType", "status"]
+    },
+    "FlexyRequest": {
+      "title": "FlexyRequest",
+      "description": "Algerian mobile & fibre balance recharge request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referenceCode": { "type": "string", "maxLength": 50 },
+        "customerUid": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "operator": { "type": "string", "enum": ["mobilis", "djezzy", "ooredoo", "idoom_fibre"] },
+        "targetNumberOrContract": { "type": "string", "maxLength": 100 },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["new", "processing", "completed", "rejected"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["referenceCode", "customerName", "customerPhone", "operator", "targetNumberOrContract", "amount", "status"]
+    },
+    "BillPaymentRequest": {
+      "title": "BillPaymentRequest",
+      "description": "Utility and telecom bill settlement request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referenceCode": { "type": "string", "maxLength": 50 },
+        "customerUid": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "customerEmail": { "type": "string", "maxLength": 255 },
+        "billType": { "type": "string", "enum": ["electricity_gas", "water", "landline", "internet"] },
+        "billReference": { "type": "string", "maxLength": 100 },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["new", "processing", "completed", "rejected"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["referenceCode", "customerName", "customerPhone", "billType", "billReference", "amount", "status"]
+    },
+    "CustomerMessage": {
+      "title": "CustomerMessage",
+      "description": "Customer contact form message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "maxLength": 255 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 3000 },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "phone", "message", "createdAt"]
+    },
+    "BannerItem": {
+      "title": "BannerItem",
+      "description": "Promotional banners and hero images",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "subtitle": { "type": "string", "maxLength": 300 },
+        "imageUrl": { "type": "string", "maxLength": 2000 },
+        "linkUrl": { "type": "string", "maxLength": 500 },
+        "order": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "imageUrl", "isActive"]
     }
   },
   "firestore": {
@@ -249,6 +342,26 @@
     "/adminLogs/{logId}": {
       "schema": "AdminLog",
       "description": "Administrative actions audit log"
+    },
+    "/documentRequests/{documentId}": {
+      "schema": "DocumentExtractionRequest",
+      "description": "Government document extraction requests"
+    },
+    "/flexyRequests/{flexyId}": {
+      "schema": "FlexyRequest",
+      "description": "Flexy & Fibre balance requests"
+    },
+    "/billPayments/{billId}": {
+      "schema": "BillPaymentRequest",
+      "description": "Utility bill payment requests"
+    },
+    "/customerMessages/{messageId}": {
+      "schema": "CustomerMessage",
+      "description": "Customer inquiries and contact messages"
+    },
+    "/banners/{bannerId}": {
+      "schema": "BannerItem",
+      "description": "Storefront promotional banners"
     }
   }
 }

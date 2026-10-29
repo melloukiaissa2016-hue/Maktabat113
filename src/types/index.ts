@@ -15,16 +15,17 @@ export interface AppUser {
 
 export interface ManagedFileItem {
   file: UploadedFileInfo;
-  sourceType: 'print' | 'research';
+  sourceType: 'print' | 'research' | 'bill' | 'document';
   referenceCode: string;
   customerName: string;
   customerPhone: string;
-  orderStatus: OrderStatus;
+  orderStatus: OrderStatus | FlexyStatus;
   requestId: string;
   notes?: string;
 }
 
 export type OrderStatus = 'new' | 'processing' | 'ready' | 'completed' | 'cancelled';
+export type FlexyStatus = 'new' | 'processing' | 'completed' | 'rejected';
 
 export interface CartItem {
   productId: string;
@@ -51,6 +52,7 @@ export interface Product {
   category: string;
   stock: number;
   imageUrl: string;
+  additionalImages?: string[]; // Multiple photos support
   featured?: boolean;
   isActive?: boolean;
   createdAt: string;
@@ -115,17 +117,100 @@ export interface ResearchRequest {
   customerPhone: string;
   customerEmail?: string;
   title: string;
-  academicLevel: string; // 'primary' | 'middle' | 'high' | 'license' | 'master' | 'doctorate' | 'other'
+  academicLevel: string;
   specialty: string;
-  serviceType: string; // 'print_bind' | 'formatting' | 'full_service' | 'proofreading'
+  serviceType: string;
   deadline?: string;
   files: UploadedFileInfo[];
+  resultFiles?: UploadedFileInfo[];
   notes?: string;
   internalNotes?: string;
   calculatedPrice?: number;
   status: OrderStatus;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface FlexyRequest {
+  id: string;
+  referenceCode: string;
+  customerUid?: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  operator: 'mobilis' | 'djezzy' | 'ooredoo' | 'idoom_fibre';
+  targetNumberOrContract: string; // Phone number or Idoom contract ID
+  amount: number;
+  notes?: string;
+  adminNote?: string;
+  status: FlexyStatus;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface BillPaymentRequest {
+  id: string;
+  referenceCode: string;
+  customerUid?: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  billType: 'electricity_gas' | 'water' | 'landline' | 'internet';
+  billReference: string;
+  amount: number;
+  billFile?: UploadedFileInfo;
+  notes?: string;
+  adminNote?: string;
+  status: FlexyStatus;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface DocumentExtractionRequest {
+  id: string;
+  referenceCode: string;
+  customerUid?: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string; // MANDATORY & VALIDATED
+  serviceCategory?: 'competitions' | 'documents';
+  serviceItem?: string;
+  customServiceName?: string;
+  docCategory: string;
+  nationalIdOrNin?: string;
+  notes?: string;
+  attachedFiles?: UploadedFileInfo[];
+  resultFiles?: UploadedFileInfo[];
+  status: OrderStatus;
+  adminNote?: string;
+  calculatedPrice?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CustomerMessage {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  subject: string;
+  message: string;
+  isRead: boolean;
+  status: 'new' | 'replied' | 'archived';
+  adminReply?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface BannerItem {
+  id: string;
+  title: string;
+  imageUrl: string;
+  linkUrl?: string;
+  subtitle?: string;
+  isActive: boolean;
+  order: number;
+  createdAt: string;
 }
 
 export interface JobOffer {
@@ -177,6 +262,10 @@ export interface SiteSettings {
   siteName: string;
   siteNameAr: string;
   logoUrl?: string;
+  heroBannerUrl?: string;
+  heroSubtitle?: string;
+  country: string;
+  currency: string;
   phone: string;
   phoneWhatsApp: string;
   email: string;
@@ -188,6 +277,7 @@ export interface SiteSettings {
   deliveryPrice: number;
   sectionsConfig: Record<string, boolean>;
   retentionDays: number;
+  novemberBannerEnabled?: boolean;
   updatedAt: string;
 }
 
@@ -199,3 +289,4 @@ export interface AdminLog {
   targetId?: string;
   timestamp: string;
 }
+

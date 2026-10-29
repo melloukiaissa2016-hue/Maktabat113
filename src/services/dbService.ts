@@ -23,11 +23,16 @@ import {
   Lesson,
   SiteSettings,
   AdminLog,
-  AppUser
+  AppUser,
+  FlexyRequest,
+  BillPaymentRequest,
+  DocumentExtractionRequest,
+  CustomerMessage,
+  BannerItem
 } from '../types';
 
 // Helper to generate human-readable reference codes
-export function generateReferenceCode(prefix: 'ORD' | 'PRN' | 'RES' | 'DOC'): string {
+export function generateReferenceCode(prefix: 'ORD' | 'PRN' | 'RES' | 'DOC' | 'FLX' | 'BIL'): string {
   const randomNum = Math.floor(10000 + Math.random() * 90000);
   return `${prefix}-${randomNum}`;
 }
@@ -280,8 +285,8 @@ export async function updateResearchRequest(
 // ---------------- TRACK BY CODE ----------------
 
 export async function findByReferenceCode(code: string): Promise<{
-  type: 'order' | 'print' | 'research';
-  data: Order | PrintRequest | ResearchRequest;
+  type: 'order' | 'print' | 'research' | 'document' | 'flexy' | 'bill';
+  data: Order | PrintRequest | ResearchRequest | DocumentExtractionRequest | FlexyRequest | BillPaymentRequest;
 } | null> {
   const clean = code.trim().toUpperCase();
 
@@ -306,6 +311,30 @@ export async function findByReferenceCode(code: string): Promise<{
     const rSnap = await getDocs(query(collection(db, 'researchRequests'), where('referenceCode', '==', clean), limit(1)));
     if (!rSnap.empty) {
       return { type: 'research', data: { id: rSnap.docs[0].id, ...rSnap.docs[0].data() } as ResearchRequest };
+    }
+  } catch {}
+
+  // Try documentRequests
+  try {
+    const dSnap = await getDocs(query(collection(db, 'documentRequests'), where('referenceCode', '==', clean), limit(1)));
+    if (!dSnap.empty) {
+      return { type: 'document', data: { id: dSnap.docs[0].id, ...dSnap.docs[0].data() } as DocumentExtractionRequest };
+    }
+  } catch {}
+
+  // Try flexyRequests
+  try {
+    const fSnap = await getDocs(query(collection(db, 'flexyRequests'), where('referenceCode', '==', clean), limit(1)));
+    if (!fSnap.empty) {
+      return { type: 'flexy', data: { id: fSnap.docs[0].id, ...fSnap.docs[0].data() } as FlexyRequest };
+    }
+  } catch {}
+
+  // Try billPayments
+  try {
+    const bSnap = await getDocs(query(collection(db, 'billPayments'), where('referenceCode', '==', clean), limit(1)));
+    if (!bSnap.empty) {
+      return { type: 'bill', data: { id: bSnap.docs[0].id, ...bSnap.docs[0].data() } as BillPaymentRequest };
     }
   } catch {}
 
@@ -410,13 +439,17 @@ export async function deleteLesson(lessonId: string): Promise<void> {
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   id: 'global',
-  siteName: 'Maktaba113',
+  siteName: 'Maktaba113 – مكتبة 113',
   siteNameAr: 'مكتبة 113',
   logoUrl: '',
-  phone: '0550 11 31 13',
-  phoneWhatsApp: '+213550113113',
-  email: 'contact@maktaba113.com',
-  address: 'وسط المدينة - حي الاستقلال، الجزائر',
+  heroBannerUrl: 'https://images.unsplash.com/photo-1507842229451-79714088a8d0?auto=format&fit=crop&w=1200&q=80',
+  heroSubtitle: 'خدمات الطباعة، البحوث الجامعية، استخراج الوثائق الإدارية، شحن الأرصدة وتسديد الفواتير والأدوات المدرسية والقرطاسية',
+  country: 'الجزائر',
+  currency: 'DZD',
+  phone: '0664751271',
+  phoneWhatsApp: '0664751271',
+  email: 'mactabat113@gmail.com',
+  address: 'حي 113 مسكن',
   workingHours: 'السبت - الخميس: 08:00 صباحاً - 20:00 مساءً | الجمعة: 14:00 - 20:00',
   facebookUrl: 'https://facebook.com',
   instagramUrl: 'https://instagram.com',
@@ -428,6 +461,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     printing: true,
     research: true,
     documents: true,
+    flexy: true,
+    bills: true,
     jobs: true,
     lessons: true,
     toys: true,
@@ -437,6 +472,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     contact: true
   },
   retentionDays: 30,
+  novemberBannerEnabled: true,
   updatedAt: new Date().toISOString()
 };
 
@@ -521,6 +557,310 @@ export async function deleteUserRecord(userId: string): Promise<void> {
     await deleteDoc(doc(db, 'users', userId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+    throw error;
+  }
+}
+
+// ---------------- DOCUMENT EXTRACTION REQUESTS ----------------
+
+export async function createDocumentRequest(requestData: Omit<DocumentExtractionRequest, 'id'>): Promise<string> {
+  try {
+    const docRef = await addDoc(collection(db, 'documentRequests'), {
+      ...requestData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'documentRequests');
+    throw error;
+  }
+}
+
+export function subscribeDocumentRequests(callback: (requests: DocumentExtractionRequest[]) => void) {
+  const q = query(collection(db, 'documentRequests'), orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentExtractionRequest));
+      callback(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'documentRequests');
+    }
+  );
+}
+
+export function subscribeCustomerDocumentRequests(customerUid: string, callback: (requests: DocumentExtractionRequest[]) => void) {
+  const q = query(
+    collection(db, 'documentRequests'),
+    where('customerUid', '==', customerUid),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentExtractionRequest));
+      callback(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'documentRequests');
+    }
+  );
+}
+
+export async function updateDocumentRequest(requestId: string, updates: Partial<DocumentExtractionRequest>): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'documentRequests', requestId), {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `documentRequests/${requestId}`);
+    throw error;
+  }
+}
+
+export async function deleteDocumentRequest(requestId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'documentRequests', requestId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `documentRequests/${requestId}`);
+    throw error;
+  }
+}
+
+// ---------------- FLEXY / RECHARGE REQUESTS ----------------
+
+export async function createFlexyRequest(requestData: Omit<FlexyRequest, 'id'>): Promise<string> {
+  try {
+    const docRef = await addDoc(collection(db, 'flexyRequests'), {
+      ...requestData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'flexyRequests');
+    throw error;
+  }
+}
+
+export function subscribeFlexyRequests(callback: (requests: FlexyRequest[]) => void) {
+  const q = query(collection(db, 'flexyRequests'), orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FlexyRequest));
+      callback(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'flexyRequests');
+    }
+  );
+}
+
+export function subscribeCustomerFlexyRequests(customerUid: string, callback: (requests: FlexyRequest[]) => void) {
+  const q = query(
+    collection(db, 'flexyRequests'),
+    where('customerUid', '==', customerUid),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FlexyRequest));
+      callback(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'flexyRequests');
+    }
+  );
+}
+
+export async function updateFlexyRequest(requestId: string, updates: Partial<FlexyRequest>): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'flexyRequests', requestId), {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `flexyRequests/${requestId}`);
+    throw error;
+  }
+}
+
+export async function deleteFlexyRequest(requestId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'flexyRequests', requestId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `flexyRequests/${requestId}`);
+    throw error;
+  }
+}
+
+// ---------------- BILL PAYMENT REQUESTS ----------------
+
+export async function createBillPayment(requestData: Omit<BillPaymentRequest, 'id'>): Promise<string> {
+  try {
+    const docRef = await addDoc(collection(db, 'billPayments'), {
+      ...requestData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'billPayments');
+    throw error;
+  }
+}
+
+export function subscribeBillPayments(callback: (requests: BillPaymentRequest[]) => void) {
+  const q = query(collection(db, 'billPayments'), orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as BillPaymentRequest));
+      callback(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'billPayments');
+    }
+  );
+}
+
+export function subscribeCustomerBillPayments(customerUid: string, callback: (requests: BillPaymentRequest[]) => void) {
+  const q = query(
+    collection(db, 'billPayments'),
+    where('customerUid', '==', customerUid),
+    orderBy('createdAt', 'desc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as BillPaymentRequest));
+      callback(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'billPayments');
+    }
+  );
+}
+
+export async function updateBillPayment(requestId: string, updates: Partial<BillPaymentRequest>): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'billPayments', requestId), {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `billPayments/${requestId}`);
+    throw error;
+  }
+}
+
+export async function deleteBillPayment(requestId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'billPayments', requestId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `billPayments/${requestId}`);
+    throw error;
+  }
+}
+
+// ---------------- CUSTOMER INQUIRIES & MESSAGES ----------------
+
+export async function sendCustomerMessage(msgData: Omit<CustomerMessage, 'id' | 'isRead' | 'status' | 'createdAt'>): Promise<string> {
+  try {
+    const docRef = await addDoc(collection(db, 'customerMessages'), {
+      ...msgData,
+      isRead: false,
+      status: 'new',
+      createdAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'customerMessages');
+    throw error;
+  }
+}
+
+export function subscribeCustomerMessages(callback: (messages: CustomerMessage[]) => void) {
+  const q = query(collection(db, 'customerMessages'), orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CustomerMessage));
+      callback(list);
+    },
+    (error) => {
+      console.warn('Could not subscribe to customer messages:', error);
+    }
+  );
+}
+
+export async function updateCustomerMessage(msgId: string, updates: Partial<CustomerMessage>): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'customerMessages', msgId), {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `customerMessages/${msgId}`);
+    throw error;
+  }
+}
+
+export async function deleteCustomerMessage(msgId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'customerMessages', msgId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `customerMessages/${msgId}`);
+    throw error;
+  }
+}
+
+// ---------------- BANNERS & PROMOS ----------------
+
+export function subscribeBanners(callback: (banners: BannerItem[]) => void) {
+  const q = query(collection(db, 'banners'), orderBy('order', 'asc'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as BannerItem));
+      callback(list);
+    },
+    (error) => {
+      console.warn('Could not subscribe to banners:', error);
+    }
+  );
+}
+
+export async function saveBanner(banner: Partial<BannerItem>): Promise<string> {
+  try {
+    if (banner.id) {
+      await updateDoc(doc(db, 'banners', banner.id), banner);
+      return banner.id;
+    } else {
+      const docRef = await addDoc(collection(db, 'banners'), {
+        ...banner,
+        order: banner.order || 1,
+        isActive: banner.isActive !== false,
+        createdAt: new Date().toISOString()
+      });
+      return docRef.id;
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'banners');
+    throw error;
+  }
+}
+
+export async function deleteBanner(bannerId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'banners', bannerId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `banners/${bannerId}`);
     throw error;
   }
 }

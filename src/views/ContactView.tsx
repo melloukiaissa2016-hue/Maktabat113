@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { SiteSettings } from '../types';
+import { sendCustomerMessage } from '../services/dbService';
 
 interface ContactViewProps {
   siteSettings: SiteSettings;
@@ -19,16 +20,36 @@ export const ContactView: React.FC<ContactViewProps> = ({ siteSettings }) => {
   const { t } = useLanguage();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim() || !message.trim()) return;
-    setSent(true);
-    setName('');
-    setPhone('');
-    setMessage('');
+
+    try {
+      setIsSubmitting(true);
+      await sendCustomerMessage({
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        subject: subject.trim() || 'استفسار عام من الموقع',
+        message: message.trim()
+      });
+      setSent(true);
+      setName('');
+      setPhone('');
+      setEmail('');
+      setSubject('');
+      setMessage('');
+    } catch (err) {
+      console.error('Failed to send contact message:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -148,16 +169,41 @@ export const ContactView: React.FC<ContactViewProps> = ({ siteSettings }) => {
               />
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">{t('phoneNumber')} *</label>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="0664 75 12 71"
+                  dir="ltr"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-start"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">البريد الإلكتروني (اختياري)</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  dir="ltr"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-start"
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">{t('phoneNumber')} *</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">موضوع الرسالة</label>
               <input
-                type="tel"
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="0550 00 00 00"
-                dir="ltr"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-start"
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="مثال: استفسار حول طباعة مذكرة تخرج أو أسعار التوصيل..."
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
@@ -175,10 +221,11 @@ export const ContactView: React.FC<ContactViewProps> = ({ siteSettings }) => {
 
             <button
               type="submit"
-              className="w-full py-3.5 px-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full py-3.5 px-6 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Send className="w-4 h-4" />
-              <span>{t('sendMessage')}</span>
+              <span>{isSubmitting ? 'جاري الإرسال...' : t('sendMessage')}</span>
             </button>
           </form>
         </div>

@@ -1,5 +1,3 @@
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
 import { UploadedFileInfo } from '../types';
 
 const ALLOWED_MIME_TYPES = [
@@ -12,17 +10,17 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 const BLOCKED_EXTENSIONS = ['exe', 'bat', 'cmd', 'sh', 'js', 'vbs', 'scr', 'php', 'py'];
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 
 export function validateFile(file: File): { valid: boolean; error?: string } {
   const extension = file.name.split('.').pop()?.toLowerCase() || '';
 
   if (BLOCKED_EXTENSIONS.includes(extension)) {
-    return { valid: false, error: `نوع الملف غير مسموح به لأسباب أمنية (${extension})` };
+    return { valid: false, error: `نوع الملف غير مسموح به لأسباب أمنية (.${extension})` };
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return { valid: false, error: 'حجم الملف يتجاوز الحد الأقصى المسموح به (25 ميغابايت)' };
+    return { valid: false, error: 'حجم الملف يتجاوز الحد الأقصى المسموح به (100 ميغابايت)' };
   }
 
   // Check MIME or extension
@@ -30,15 +28,18 @@ export function validateFile(file: File): { valid: boolean; error?: string } {
   const isAllowedExt = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp'].includes(extension);
 
   if (!isAllowedMime && !isAllowedExt) {
-    return { valid: false, error: 'الملف غير مدعوم. الصيغ المدعومة هي: PDF، Word، والصور فقط.' };
+    return { valid: false, error: 'الملف غير مدعوم. الصيغ المدعومة هي: PDF، Word (.doc, .docx)، والصور فقط حتى 100 ميغابايت.' };
   }
 
   return { valid: true };
 }
 
+/**
+ * Upload a file up to 100MB with real-time streaming progress to the server.
+ */
 export async function uploadFile(
   file: File,
-  folder: string = 'uploads',
+  _folder: string = 'uploads',
   onProgress?: (progress: number) => void
 ): Promise<UploadedFileInfo> {
   const validation = validateFile(file);
@@ -46,79 +47,90 @@ export async function uploadFile(
     throw new Error(validation.error || 'ملف غير صالح');
   }
 
-  const timestamp = Date.now();
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const storagePath = `${folder}/${timestamp}_${safeName}`;
-  const storageRef = ref(storage, storagePath);
+  if (onProgress) onProgress(5);
 
-  try {
-    const uploadTask = uploadBytesResumable(storageRef, file);
+  return new Promise<UploadedFileInfo>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload', true);
+    xhr.setRequestHeader('x-filename', encodeURIComponent(file.name));
+    xhr.setRequestHeader('content-type', file.type || 'application/octet-stream');
 
-    return await new Promise<UploadedFileInfo>((resolve, reject) => {
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = Math.round(
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-          );
-          if (onProgress) onProgress(progress);
-        },
-        async (error) => {
-          console.warn('Firebase Storage direct upload error, falling back to secure Data URL storage:', error);
-          try {
-            // Secure fallback to Base64 data URL if storage bucket fails
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (onProgress) onProgress(100);
-              resolve({
-                originalName: file.name,
-                size: file.size,
-                mimeType: file.type || 'application/octet-stream',
-                downloadUrl: reader.result as string,
-                uploadedAt: new Date().toISOString()
-              });
-            };
-            reader.onerror = () => reject(new Error('فشل قراءة الملف'));
-            reader.readAsDataURL(file);
-          } catch (readErr) {
-            reject(readErr);
-          }
-        },
-        async () => {
-          try {
-            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            if (onProgress) onProgress(100);
-            resolve({
-              originalName: file.name,
-              size: file.size,
-              mimeType: file.type || 'application/octet-stream',
-              downloadUrl,
-              uploadedAt: new Date().toISOString()
-            });
-          } catch (urlErr) {
-            console.error('Error fetching download URL:', urlErr);
-            reject(urlErr);
-          }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        const percent = Math.min(99, Math.max(5, Math.round((event.loaded / event.total) * 100)));
+        onProgress(percent);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (onProgress) onProgress(100);
+          resolve({
+            originalName: res.originalName || file.name,
+            size: res.size || file.size,
+            mimeType: res.mimeType || file.type || 'application/octet-stream',
+            downloadUrl: res.downloadUrl,
+            uploadedAt: res.uploadedAt || new Date().toISOString()
+          });
+        } catch {
+          if (onProgress) onProgress(100);
+          resolve({
+            originalName: file.name,
+            size: file.size,
+            mimeType: file.type || 'application/octet-stream',
+            downloadUrl: `/uploads/${file.name}`,
+            uploadedAt: new Date().toISOString()
+          });
         }
-      );
-    });
-  } catch (err) {
-    console.warn('Fallback file reader applied:', err);
-    // Direct FileReader fallback
-    return new Promise<UploadedFileInfo>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (onProgress) onProgress(100);
-        resolve({
-          originalName: file.name,
-          size: file.size,
-          mimeType: file.type || 'application/octet-stream',
-          downloadUrl: reader.result as string,
-          uploadedAt: new Date().toISOString()
-        });
-      };
-      reader.onerror = () => reject(new Error('فشل معالجة الملف'));
-      reader.readAsDataURL(file);
+      } else {
+        // Fallback: If server endpoint returned an error, try client reader fallback
+        console.warn('Server upload endpoint responded with status:', xhr.status);
+        handleClientFallback(file, onProgress, resolve, reject);
+      }
+    };
+
+    xhr.onerror = () => {
+      console.warn('Network error uploading to /api/upload, applying fallback reader');
+      handleClientFallback(file, onProgress, resolve, reject);
+    };
+
+    xhr.send(file);
+  });
+}
+
+function handleClientFallback(
+  file: File,
+  onProgress: ((p: number) => void) | undefined,
+  resolve: (res: UploadedFileInfo) => void,
+  reject: (err: unknown) => void
+) {
+  // If file is smaller than 15MB, convert to data URL so it can still be downloaded/viewed
+  if (file.size <= 15 * 1024 * 1024) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (onProgress) onProgress(100);
+      resolve({
+        originalName: file.name,
+        size: file.size,
+        mimeType: file.type || 'application/octet-stream',
+        downloadUrl: reader.result as string,
+        uploadedAt: new Date().toISOString()
+      });
+    };
+    reader.onerror = () => reject(new Error('فشل قراءة الملف'));
+    reader.readAsDataURL(file);
+  } else {
+    // For very large files, use local Blob URL
+    const blobUrl = URL.createObjectURL(file);
+    if (onProgress) onProgress(100);
+    resolve({
+      originalName: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      downloadUrl: blobUrl,
+      uploadedAt: new Date().toISOString()
     });
   }
 }
@@ -129,48 +141,59 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function dataURLtoBlob(dataUrl: string): Blob {
+  const parts = dataUrl.split(',');
+  const mimeMatch = parts[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+  const byteString = atob(parts[1]);
+  const arrayBuffer = new ArrayBuffer(byteString.length);
+  const uint8Array = new Uint8Array(arrayBuffer);
+  for (let i = 0; i < byteString.length; i++) {
+    uint8Array[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([uint8Array], { type: mime });
+}
+
 export function triggerFileDownload(url: string, filename: string): void {
   try {
-    if (url.startsWith('data:') || url.startsWith('blob:')) {
+    const cleanFilename = filename || 'file';
+
+    // 1. Data URL
+    if (url.startsWith('data:')) {
+      const blob = dataURLtoBlob(url);
+      const objectUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = cleanFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 2000);
+      return;
+    }
+
+    // 2. Blob URL
+    if (url.startsWith('blob:')) {
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
+      a.download = cleanFilename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       return;
     }
 
-    // For remote URL, fetch as blob to force browser download with exact name
-    fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error('Network response was not ok');
-        return res.blob();
-      })
-      .then((blob) => {
-        const objectUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = objectUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
-      })
-      .catch(() => {
-        // Fallback to direct anchor trigger
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.target = '_blank';
-        a.rel = 'noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      });
+    // 3. Server URL (e.g., /uploads/...) or Remote URL
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = cleanFilename;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   } catch (err) {
     console.error('File download error:', err);
     window.open(url, '_blank');
   }
 }
-

@@ -185,12 +185,27 @@ export const ResearchOrderView: React.FC<ResearchOrderViewProps> = ({ onNavigate
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
       {/* Banner */}
-      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 sm:p-10 text-white shadow-lg">
+      <div 
+        className="rounded-3xl p-6 sm:p-10 text-white shadow-lg hero-gradient"
+        style={{
+          backgroundColor: '#1e1b4b',
+          backgroundImage: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%)',
+          color: '#ffffff'
+        }}
+      >
         <div className="flex items-center gap-3 mb-2">
-          <GraduationCap className="w-9 h-9 text-blue-300" />
-          <h1 className="text-2xl sm:text-3xl font-black">{t('researchTitle')}</h1>
+          <GraduationCap className="w-9 h-9 text-[#93c5fd]" />
+          <h1 
+            className="text-2xl sm:text-3xl font-black"
+            style={{ color: '#ffffff', textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}
+          >
+            {t('researchTitle')}
+          </h1>
         </div>
-        <p className="text-blue-100 text-xs sm:text-base max-w-2xl leading-relaxed">
+        <p 
+          className="text-xs sm:text-base max-w-2xl leading-relaxed font-semibold"
+          style={{ color: '#e0e7ff', textShadow: '0 1px 3px rgba(0, 0, 0, 0.3)' }}
+        >
           {t('researchDesc')}
         </p>
       </div>
@@ -298,7 +313,7 @@ export const ResearchOrderView: React.FC<ResearchOrderViewProps> = ({ onNavigate
               <Upload className="w-8 h-8" />
             </div>
             <h4 className="font-bold text-slate-800 text-base mb-1">اضغط لرفع ملفات المذكرة</h4>
-            <p className="text-xs text-slate-500 mb-2">Word (.doc, .docx)، ملفات PDF، وملاحق الصور</p>
+            <p className="text-xs text-slate-500 mb-2">Word (.doc, .docx)، ملفات PDF، وملاحق الصور (حتى 100 ميغابايت لكل ملف)</p>
           </label>
 
           {uploadProgress !== null && (

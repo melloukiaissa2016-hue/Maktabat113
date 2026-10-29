@@ -9,12 +9,14 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultMode?: 'login' | 'register';
+  onNavigateToAdmin?: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
-  defaultMode = 'login'
+  defaultMode = 'login',
+  onNavigateToAdmin
 }) => {
   const { loginWithEmail, registerWithEmail, loginWithGoogle } = useAuth();
   const { t } = useLanguage();
@@ -258,6 +260,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </p>
           )}
         </div>
+
+        {onNavigateToAdmin && (
+          <div className="mt-5 pt-3 border-t border-slate-100 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onNavigateToAdmin();
+              }}
+              className="text-[11px] text-slate-400 hover:text-emerald-700 transition-colors inline-flex items-center gap-1 font-medium"
+            >
+              <Lock className="w-3 h-3" />
+              <span>تسجيل دخول مالك المنصة (لوحة الإدارة)</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

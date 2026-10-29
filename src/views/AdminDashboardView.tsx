@@ -30,7 +30,14 @@ import {
   KeyRound,
   Store,
   Layers,
-  ArrowUpRight
+  ArrowUpRight,
+  Smartphone,
+  Receipt,
+  FileCheck2,
+  Image as ImageIcon,
+  MessageSquare,
+  Mail,
+  Upload
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -54,7 +61,22 @@ import {
   saveLesson,
   deleteLesson,
   updateSiteSettings,
-  logAdminAction
+  logAdminAction,
+  subscribeDocumentRequests,
+  updateDocumentRequest,
+  deleteDocumentRequest,
+  subscribeFlexyRequests,
+  updateFlexyRequest,
+  deleteFlexyRequest,
+  subscribeBillPayments,
+  updateBillPayment,
+  deleteBillPayment,
+  subscribeCustomerMessages,
+  updateCustomerMessage,
+  deleteCustomerMessage,
+  subscribeBanners,
+  saveBanner,
+  deleteBanner
 } from '../services/dbService';
 import {
   Order,
@@ -66,12 +88,19 @@ import {
   AdminLog,
   SiteSettings,
   OrderStatus,
+  FlexyStatus,
   UploadedFileInfo,
   AppUser,
-  ManagedFileItem
+  ManagedFileItem,
+  DocumentExtractionRequest,
+  FlexyRequest,
+  BillPaymentRequest,
+  CustomerMessage,
+  BannerItem
 } from '../types';
-import { formatFileSize, triggerFileDownload } from '../services/storageService';
+import { formatFileSize, triggerFileDownload, validateFile, uploadFile } from '../services/storageService';
 import { FilePreviewModal } from '../components/FilePreviewModal';
+import { DirectPrintModal } from '../components/DirectPrintModal';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 
@@ -90,7 +119,22 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const { t } = useLanguage();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'orders' | 'prints' | 'research' | 'files' | 'customers' | 'products' | 'jobs' | 'lessons' | 'settings' | 'logs'
+    | 'overview'
+    | 'customers'
+    | 'orders'
+    | 'products'
+    | 'banners'
+    | 'prints'
+    | 'research'
+    | 'documents'
+    | 'flexy'
+    | 'bills'
+    | 'files'
+    | 'jobs'
+    | 'lessons'
+    | 'messages'
+    | 'settings'
+    | 'logs'
   >('overview');
 
   // Real data state
@@ -102,12 +146,24 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [logs, setLogs] = useState<AdminLog[]>([]);
   const [customers, setCustomers] = useState<AppUser[]>([]);
+  const [documents, setDocuments] = useState<DocumentExtractionRequest[]>([]);
+  const [flexyList, setFlexyList] = useState<FlexyRequest[]>([]);
+  const [billsList, setBillsList] = useState<BillPaymentRequest[]>([]);
+  const [messagesList, setMessagesList] = useState<CustomerMessage[]>([]);
+  const [bannersList, setBannersList] = useState<BannerItem[]>([]);
 
   // Modals & UI states
   const [previewFile, setPreviewFile] = useState<UploadedFileInfo | null>(null);
+  const [directPrintTarget, setDirectPrintTarget] = useState<{
+    file: UploadedFileInfo;
+    requestInfo: any;
+    reqId: string;
+    type: 'print' | 'research';
+  } | null>(null);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [editingJob, setEditingJob] = useState<Partial<JobOffer> | null>(null);
   const [editingLesson, setEditingLesson] = useState<Partial<Lesson> | null>(null);
+  const [editingBanner, setEditingBanner] = useState<Partial<BannerItem> | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Filters for Files tab
@@ -116,6 +172,20 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
   // Filters for Customers tab
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+
+  // Filters for Flexy tab
+  const [flexyOperatorFilter, setFlexyOperatorFilter] = useState<string>('all');
+  const [flexySearchQuery, setFlexySearchQuery] = useState('');
+
+  // Filters for Bills tab
+  const [billsProviderFilter, setBillsProviderFilter] = useState<string>('all');
+  const [billsSearchQuery, setBillsSearchQuery] = useState('');
+
+  // Filters for Documents tab
+  const [docSearchQuery, setDocSearchQuery] = useState('');
+
+  // Filters for Messages tab
+  const [messageSearchQuery, setMessageSearchQuery] = useState('');
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState<SiteSettings>(siteSettings);
@@ -135,6 +205,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     const uLessons = subscribeLessons(setLessons);
     const uLogs = subscribeAdminLogs(setLogs);
     const uUsers = subscribeUsers(setCustomers);
+    const uDocs = subscribeDocumentRequests(setDocuments);
+    const uFlexy = subscribeFlexyRequests(setFlexyList);
+    const uBills = subscribeBillPayments(setBillsList);
+    const uMsgs = subscribeCustomerMessages(setMessagesList);
+    const uBanners = subscribeBanners(setBannersList);
 
     return () => {
       uOrders();
@@ -145,6 +220,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       uLessons();
       uLogs();
       uUsers();
+      uDocs();
+      uFlexy();
+      uBills();
+      uMsgs();
+      uBanners();
     };
   }, [isAdmin]);
 
@@ -203,8 +283,52 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       });
     });
 
+    // Bill payments attached files
+    billsList.forEach((b) => {
+      if (b.billFile) {
+        list.push({
+          file: b.billFile,
+          sourceType: 'bill',
+          referenceCode: b.referenceCode,
+          customerName: b.customerName,
+          customerPhone: b.customerPhone,
+          orderStatus: b.status,
+          requestId: b.id,
+          notes: `فاتورة: ${b.billType} - مرجع: ${b.billReference}`
+        });
+      }
+    });
+
+    // Document extraction attached files
+    documents.forEach((d) => {
+      d.attachedFiles?.forEach((f) => {
+        list.push({
+          file: f,
+          sourceType: 'document',
+          referenceCode: d.referenceCode,
+          customerName: d.customerName,
+          customerPhone: d.customerPhone,
+          orderStatus: d.status,
+          requestId: d.id,
+          notes: `مستند مرفق: ${d.docCategory}`
+        });
+      });
+      d.resultFiles?.forEach((f) => {
+        list.push({
+          file: f,
+          sourceType: 'document',
+          referenceCode: d.referenceCode,
+          customerName: d.customerName,
+          customerPhone: d.customerPhone,
+          orderStatus: d.status,
+          requestId: d.id,
+          notes: `مستخرج رسمي منجز: ${d.docCategory}`
+        });
+      });
+    });
+
     return list.sort((a, b) => new Date(b.file.uploadedAt).getTime() - new Date(a.file.uploadedAt).getTime());
-  }, [prints, research]);
+  }, [prints, research, billsList, documents]);
 
   // Filtered files
   const filteredFiles = useMemo(() => {
@@ -344,16 +468,21 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       {/* Main Tab Navigation Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none text-xs sm:text-sm">
         {[
-          { id: 'overview', label: t('tabOverview'), icon: TrendingUp },
-          { id: 'orders', label: `${t('tabOrders')} (${orders.length})`, icon: ShoppingBag },
-          { id: 'prints', label: `${t('tabPrint')} (${prints.length})`, icon: Printer },
-          { id: 'research', label: `${t('tabResearch')} (${research.length})`, icon: FileText },
-          { id: 'files', label: `مركز الملفات الأصلية (${allManagedFiles.length})`, icon: FolderDown },
-          { id: 'customers', label: `حسابات الزبائن (${customers.length})`, icon: Users },
-          { id: 'products', label: `${t('tabProducts')} (${products.length})`, icon: Package },
-          { id: 'jobs', label: `${t('tabJobs')} (${jobs.length})`, icon: Briefcase },
-          { id: 'lessons', label: `${t('tabLessons')} (${lessons.length})`, icon: BookOpen },
-          { id: 'settings', label: t('tabSettings'), icon: Settings },
+          { id: 'overview', label: '1. ' + t('tabOverview'), icon: TrendingUp },
+          { id: 'customers', label: `2. الزبائن (${customers.length})`, icon: Users },
+          { id: 'orders', label: `3. ${t('tabOrders')} (${orders.length})`, icon: ShoppingBag },
+          { id: 'products', label: `4. ${t('tabProducts')} (${products.length})`, icon: Package },
+          { id: 'banners', label: `5. الصور والبنرات (${bannersList.length})`, icon: ImageIcon },
+          { id: 'prints', label: `6. ${t('tabPrint')} (${prints.length})`, icon: Printer },
+          { id: 'research', label: `7. ${t('tabResearch')} (${research.length})`, icon: FileText },
+          { id: 'documents', label: `8. المسابقات والوثائق (${documents.length})`, icon: FileCheck2 },
+          { id: 'flexy', label: `9. فليكسي (${flexyList.length})`, icon: Smartphone },
+          { id: 'bills', label: `10. الفواتير (${billsList.length})`, icon: Receipt },
+          { id: 'files', label: `11. مركز الملفات (${allManagedFiles.length})`, icon: FolderDown },
+          { id: 'jobs', label: `12. ${t('tabJobs')} (${jobs.length})`, icon: Briefcase },
+          { id: 'lessons', label: `13. ${t('tabLessons')} (${lessons.length})`, icon: BookOpen },
+          { id: 'messages', label: `14. الرسائل (${messagesList.length})`, icon: MessageSquare },
+          { id: 'settings', label: `15. ${t('tabSettings')}`, icon: Settings },
           { id: 'logs', label: t('tabLogs'), icon: History },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -633,8 +762,32 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
+                            onClick={() => setDirectPrintTarget({
+                              file,
+                              requestInfo: {
+                                referenceCode: p.referenceCode,
+                                customerName: p.customerName,
+                                customerPhone: p.customerPhone,
+                                initialCopies: p.copies,
+                                initialColorMode: p.colorMode,
+                                initialPaperSize: p.paperSize,
+                                initialSidedness: p.sidedness,
+                                initialPageRange: p.pageRange,
+                                notes: p.notes
+                              },
+                              reqId: p.id,
+                              type: 'print'
+                            })}
+                            className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                            title="الطباعة المباشرة من لوحة الإدارة"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>الطباعة المباشرة</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setPreviewFile(file)}
-                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold flex items-center gap-1"
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
                             title="معاينة الملف"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -643,7 +796,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                           <button
                             type="button"
                             onClick={() => triggerFileDownload(file.downloadUrl, file.originalName)}
-                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1"
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
                             title="تحميل الملف الأصلي"
                           >
                             <Download className="w-3.5 h-3.5" />
@@ -755,8 +908,28 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                         <span className="font-medium truncate max-w-xs">{f.originalName}</span>
                         <button
                           type="button"
+                          onClick={() => setDirectPrintTarget({
+                            file: f,
+                            requestInfo: {
+                              referenceCode: r.referenceCode,
+                              customerName: r.customerName,
+                              customerPhone: r.customerPhone,
+                              initialCopies: 1,
+                              notes: `${r.title} • ${r.academicLevel} • ${r.specialty}`
+                            },
+                            reqId: r.id,
+                            type: 'research'
+                          })}
+                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                          title="الطباعة المباشرة للمذكرة"
+                        >
+                          <Printer className="w-3 h-3" />
+                          <span>طباعة مباشرة</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setPreviewFile(f)}
-                          className="p-1 hover:bg-slate-200 rounded text-blue-600"
+                          className="p-1 hover:bg-slate-200 rounded text-blue-600 cursor-pointer"
                           title="معاينة"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -764,7 +937,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                         <button
                           type="button"
                           onClick={() => triggerFileDownload(f.downloadUrl, f.originalName)}
-                          className="p-1 hover:bg-slate-200 rounded text-slate-700"
+                          className="p-1 hover:bg-slate-200 rounded text-slate-700 cursor-pointer"
                           title="تحميل الملف الأصلي"
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -1322,7 +1495,875 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         </div>
       )}
 
-      {/* TAB 10: SITE SETTINGS */}
+      {/* TAB: BANNERS & PROMOTIONS */}
+      {activeTab === 'banners' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">إدارة الصور والبنرات الإعلانية</h2>
+              <p className="text-xs text-slate-500">إدارة البنرات والعروض الترويجية الرئيسية المعروضة في الصفحة الرئيسية</p>
+            </div>
+            <button
+              onClick={() => setEditingBanner({
+                title: '',
+                subtitle: '',
+                imageUrl: '',
+                linkUrl: '',
+                order: bannersList.length + 1,
+                isActive: true
+              })}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة بنر جديد</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {bannersList.length === 0 ? (
+              <div className="col-span-full p-8 bg-white rounded-3xl border border-slate-200 text-center text-slate-400">
+                <ImageIcon className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                <p className="text-sm font-bold">لا توجد بنرات مضافة حالياً</p>
+                <p className="text-xs text-slate-500 mt-1">اضغط على «إضافة بنر جديد» لرفع صور ترويجية للمتجر أو خدمات الطباعة</p>
+              </div>
+            ) : (
+              bannersList.map((banner) => (
+                <div key={banner.id} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs flex flex-col justify-between">
+                  <div className="aspect-video bg-slate-100 relative overflow-hidden">
+                    {banner.imageUrl ? (
+                      <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400">
+                        <ImageIcon className="w-8 h-8" />
+                      </div>
+                    )}
+                    <span className={`absolute top-3 end-3 px-2 py-0.5 rounded-md text-[10px] font-bold ${banner.isActive ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
+                      {banner.isActive ? 'مفعّل' : 'معطّل'}
+                    </span>
+                  </div>
+
+                  <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">{banner.title}</h4>
+                      {banner.subtitle && <p className="text-xs text-slate-500 line-clamp-2">{banner.subtitle}</p>}
+                      {banner.linkUrl && (
+                        <a href={banner.linkUrl} target="_blank" rel="noreferrer" className="text-[11px] text-emerald-600 hover:underline block truncate mt-1">
+                          {banner.linkUrl}
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                      <button
+                        onClick={async () => {
+                          await saveBanner({ id: banner.id, isActive: !banner.isActive });
+                          showSuccess('تم تحديث حالة البنر');
+                        }}
+                        className="text-xs font-bold text-slate-600 hover:text-emerald-700 cursor-pointer"
+                      >
+                        {banner.isActive ? 'تعطيل' : 'تفعيل'}
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setEditingBanner(banner)}
+                          className="p-1.5 hover:bg-slate-100 text-slate-700 rounded-lg cursor-pointer"
+                          title="تعديل"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm('هل أنت متأكد من حذف هذا البنر؟')) {
+                              await deleteBanner(banner.id);
+                              showSuccess('تم حذف البنر');
+                            }
+                          }}
+                          className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg cursor-pointer"
+                          title="حذف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: DOCUMENT EXTRACTION REQUESTS */}
+      {activeTab === 'documents' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900">طلبات التسجيل في المسابقات واستخراج الوثائق</h2>
+                <span className="px-2.5 py-0.5 bg-teal-100 text-teal-800 text-xs font-bold rounded-full">
+                  {documents.length} طلب
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">طلبات التسجيل في مسابقات الأساتذة، القضاة، الحماية، الشرطة، السكن، واستخراج مختلف الوثائق والاستمارات</p>
+            </div>
+
+            <button
+              onClick={() => {
+                const headers = ['الرمز المرجعي', 'الزبون', 'الهاتف', 'البريد الإلكتروني', 'الخدمة / الوثيقة', 'رقم التعريف/NIN', 'عدد المرفقات', 'الحالة', 'التاريخ'];
+                const rows = documents.map((d) => [
+                  d.referenceCode,
+                  d.customerName,
+                  d.customerPhone,
+                  d.customerEmail,
+                  d.docCategory,
+                  d.nationalIdOrNin || '',
+                  d.attachedFiles?.length || 0,
+                  d.status,
+                  d.createdAt
+                ]);
+                exportToCsv('maktaba113_competitions_documents', headers, rows);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>تصدير CSV</span>
+            </button>
+          </div>
+
+          {/* Search bar */}
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute top-3 start-3.5 pointer-events-none" />
+            <input
+              type="text"
+              value={docSearchQuery}
+              onChange={(e) => setDocSearchQuery(e.target.value)}
+              placeholder="البحث بالاسم، الهاتف، البريد أو رقم التعريف..."
+              className="w-full ps-10 pe-4 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+            />
+          </div>
+
+          <div className="space-y-4">
+            {documents
+              .filter((d) => {
+                if (!docSearchQuery.trim()) return true;
+                const q = docSearchQuery.toLowerCase();
+                return (
+                  d.customerName.toLowerCase().includes(q) ||
+                  d.customerPhone.includes(q) ||
+                  d.customerEmail.toLowerCase().includes(q) ||
+                  d.referenceCode.toLowerCase().includes(q) ||
+                  d.docCategory.toLowerCase().includes(q) ||
+                  (d.nationalIdOrNin && d.nationalIdOrNin.toLowerCase().includes(q))
+                );
+              })
+              .map((docItem) => (
+                <div key={docItem.id} className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-teal-100 text-teal-700 rounded-xl">
+                        <FileCheck2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-black text-slate-900 text-base">{docItem.referenceCode}</span>
+                          <span className="text-xs px-2.5 py-0.5 bg-teal-50 text-teal-800 border border-teal-200 rounded-full font-bold">
+                            {docItem.docCategory}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {new Date(docItem.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={docItem.status}
+                        onChange={async (e) => {
+                          const newStatus = e.target.value as OrderStatus;
+                          await updateDocumentRequest(docItem.id, { status: newStatus });
+                          await logAdminAction('UPDATE_DOC_STATUS', `Updated ${docItem.referenceCode} to ${newStatus}`, currentUser!.email!, docItem.id);
+                          showSuccess('تم تحديث حالة الطلب');
+                        }}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-50 border border-slate-200 cursor-pointer"
+                      >
+                        <option value="new">جديد (قيد المراجعة)</option>
+                        <option value="processing">قيد التسجيل / السحب</option>
+                        <option value="ready">جاهز (تم التسجيل / الاستخراج)</option>
+                        <option value="completed">مكتمل ومسلّم</option>
+                        <option value="cancelled">ملغى</option>
+                      </select>
+
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`هل أنت متأكد من حذف طلب ${docItem.referenceCode}؟`)) {
+                            await deleteDocumentRequest(docItem.id);
+                            showSuccess('تم حذف الطلب');
+                          }
+                        }}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                        title="حذف الطلب"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 p-3.5 rounded-2xl">
+                    <div>
+                      <span className="text-slate-400 block font-semibold">صاحب الطلب:</span>
+                      <span className="font-bold text-slate-900">{docItem.customerName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-semibold">الهاتف:</span>
+                      <a href={`tel:${docItem.customerPhone}`} className="font-mono font-bold text-emerald-700 hover:underline" dir="ltr">
+                        {docItem.customerPhone}
+                      </a>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-semibold">البريد الإلكتروني:</span>
+                      <a href={`mailto:${docItem.customerEmail}`} className="font-mono text-teal-700 hover:underline truncate block" dir="ltr">
+                        {docItem.customerEmail}
+                      </a>
+                    </div>
+                  </div>
+
+                  {docItem.nationalIdOrNin && (
+                    <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-xl text-xs text-amber-950 flex items-center justify-between">
+                      <span><strong>الرقم التعريفي / التسجيل / NIN: </strong><code className="font-mono font-bold">{docItem.nationalIdOrNin}</code></span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(docItem.nationalIdOrNin || '');
+                          showSuccess('تم نسخ الرقم');
+                        }}
+                        className="text-[11px] px-2 py-0.5 bg-amber-200 hover:bg-amber-300 rounded font-bold cursor-pointer"
+                      >
+                        نسخ الرقم
+                      </button>
+                    </div>
+                  )}
+
+                  {docItem.notes && (
+                    <p className="text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-100">
+                      <strong>ملاحظات الزبون: </strong>{docItem.notes}
+                    </p>
+                  )}
+
+                  {/* Customer Attached Files */}
+                  <div>
+                    <span className="text-xs font-bold text-slate-700 block mb-2">
+                      الملفات والمستندات المرفقة من الزبون ({docItem.attachedFiles?.length || 0}):
+                    </span>
+                    {docItem.attachedFiles && docItem.attachedFiles.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {docItem.attachedFiles.map((f, fIdx) => (
+                          <div key={fIdx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 truncate">
+                              <FileText className="w-4 h-4 text-teal-600 shrink-0" />
+                              <div className="truncate">
+                                <span className="font-semibold block truncate" title={f.originalName}>{f.originalName}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{formatFileSize(f.size)}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewFile(f)}
+                                className="p-1 hover:bg-white text-teal-700 rounded-md shadow-2xs"
+                                title="معاينة"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => triggerFileDownload(f.downloadUrl, f.originalName)}
+                                className="p-1 hover:bg-white text-emerald-700 rounded-md shadow-2xs"
+                                title="تحميل الملف الأصلي"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 italic block">لا توجد ملفات مرفوعة مع هذا الطلب.</span>
+                    )}
+                  </div>
+
+                  {/* Result files generated by Admin */}
+                  {docItem.resultFiles && docItem.resultFiles.length > 0 && (
+                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2">
+                      <span className="text-xs font-bold text-emerald-950 block">الملفات والوصولات المنجزة من المكتبة:</span>
+                      <div className="space-y-1.5">
+                        {docItem.resultFiles.map((rf, rfIdx) => (
+                          <div key={rfIdx} className="p-2 bg-white rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-800 truncate">{rf.originalName} ({formatFileSize(rf.size)})</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewFile(rf)}
+                                className="p-1 text-teal-700 hover:bg-slate-100 rounded"
+                                title="معاينة"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => triggerFileDownload(rf.downloadUrl, rf.originalName)}
+                                className="p-1 text-emerald-700 hover:bg-slate-100 rounded"
+                                title="تحميل"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Admin note update input and upload result file */}
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-1 border-t border-slate-100">
+                    <input
+                      type="text"
+                      defaultValue={docItem.adminNote || ''}
+                      placeholder="أضف ملاحظة أو رقم وصل للزبون..."
+                      onBlur={async (e) => {
+                        const val = e.target.value.trim();
+                        if (val !== (docItem.adminNote || '')) {
+                          await updateDocumentRequest(docItem.id, { adminNote: val });
+                          showSuccess('تم حفظ ملاحظة المشرف');
+                        }
+                      }}
+                      className="flex-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    />
+
+                    <label className="flex items-center gap-1.5 px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold cursor-pointer shrink-0">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>إرفاق وثيقة منجزة للزبون</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const uploaded = await uploadFile(file, 'documents_results');
+                            const currentResults = docItem.resultFiles || [];
+                            await updateDocumentRequest(docItem.id, {
+                              resultFiles: [...currentResults, uploaded],
+                              status: 'ready'
+                            });
+                            showSuccess('تم رفع المستخرج أو وصل التسجيل بنجاح');
+                          } catch (uploadErr) {
+                            alert('فشل رفع الملف: ' + (uploadErr instanceof Error ? uploadErr.message : 'خطأ'));
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: FLEXY & RECHARGE REQUESTS */}
+      {activeTab === 'flexy' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900">إدارة طلبات شحن الأرصدة فليكسي وإيدوم</h2>
+                <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
+                  {flexyList.length} طلب
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">معالجة شحن أرصدة موبيليس، جيزي، أوريدو، واشتراكات إيدوم فيبر يدوياً</p>
+            </div>
+
+            <button
+              onClick={() => {
+                const headers = ['الرمز المرجعي', 'المتعامل', 'رقم الهاتف أو العقد', 'المبلغ (دج)', 'الزبون', 'الهاتف للتأكيد', 'الحالة', 'التاريخ'];
+                const rows = flexyList.map((f) => [
+                  f.referenceCode,
+                  f.operator,
+                  f.targetNumberOrContract,
+                  f.amount,
+                  f.customerName,
+                  f.customerPhone,
+                  f.status,
+                  f.createdAt
+                ]);
+                exportToCsv('maktaba113_flexy', headers, rows);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>تصدير CSV</span>
+            </button>
+          </div>
+
+          {/* Quick stats & filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+              {[
+                { id: 'all', label: 'الكل' },
+                { id: 'mobilis', label: 'موبيليس Mobilis' },
+                { id: 'djezzy', label: 'جيزي Djezzy' },
+                { id: 'ooredoo', label: 'أوريدو Ooredoo' },
+                { id: 'idoom_fibre', label: 'إيدوم فيبر Idoom' },
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  onClick={() => setFlexyOperatorFilter(pill.id)}
+                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                    flexyOperatorFilter === pill.id
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative max-w-xs">
+              <Search className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
+              <input
+                type="text"
+                value={flexySearchQuery}
+                onChange={(e) => setFlexySearchQuery(e.target.value)}
+                placeholder="بحث برقم الهاتف، العقد، المرجع..."
+                className="w-full ps-9 pe-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {flexyList
+              .filter((f) => {
+                if (flexyOperatorFilter !== 'all' && f.operator !== flexyOperatorFilter) return false;
+                if (!flexySearchQuery.trim()) return true;
+                const q = flexySearchQuery.toLowerCase();
+                return (
+                  f.referenceCode.toLowerCase().includes(q) ||
+                  f.targetNumberOrContract.toLowerCase().includes(q) ||
+                  f.customerName.toLowerCase().includes(q) ||
+                  f.customerPhone.includes(q)
+                );
+              })
+              .map((flexyItem) => {
+                const opColor =
+                  flexyItem.operator === 'mobilis'
+                    ? 'bg-emerald-600 text-white'
+                    : flexyItem.operator === 'djezzy'
+                    ? 'bg-red-600 text-white'
+                    : flexyItem.operator === 'ooredoo'
+                    ? 'bg-rose-500 text-white'
+                    : 'bg-blue-600 text-white';
+
+                return (
+                  <div key={flexyItem.id} className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-3">
+                        <span className={`px-2.5 py-1 rounded-xl text-xs font-black uppercase ${opColor}`}>
+                          {flexyItem.operator === 'idoom_fibre' ? 'Idoom Fibre' : flexyItem.operator}
+                        </span>
+                        <div>
+                          <span className="font-mono font-bold text-slate-900 text-sm">{flexyItem.referenceCode}</span>
+                          <span className="text-[11px] text-slate-400 block font-mono">
+                            {new Date(flexyItem.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={flexyItem.status}
+                          onChange={async (e) => {
+                            const newStatus = e.target.value as FlexyStatus;
+                            await updateFlexyRequest(flexyItem.id, { status: newStatus });
+                            await logAdminAction('UPDATE_FLEXY_STATUS', `Updated ${flexyItem.referenceCode} to ${newStatus}`, currentUser!.email!, flexyItem.id);
+                            showSuccess('تم تحديث حالة طلب الشحن');
+                          }}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-50 border border-slate-200 cursor-pointer"
+                        >
+                          <option value="new">جديد (قيد الانتظار)</option>
+                          <option value="processing">جاري التنفيذ بالجهاز</option>
+                          <option value="completed">تم الشحن بنجاح ✓</option>
+                          <option value="rejected">مرفوض / فشل العملية</option>
+                        </select>
+
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`هل أنت متأكد من حذف طلب الشحن ${flexyItem.referenceCode}؟`)) {
+                              await deleteFlexyRequest(flexyItem.id);
+                              showSuccess('تم الحذف');
+                            }
+                          }}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                          title="حذف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 p-4 rounded-2xl items-center">
+                      <div>
+                        <span className="text-slate-400 block font-semibold">
+                          {flexyItem.operator === 'idoom_fibre' ? 'رقم العقد / الاشتراك:' : 'الرقم المراد شحنه:'}
+                        </span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="font-mono font-black text-slate-900 text-base" dir="ltr">
+                            {flexyItem.targetNumberOrContract}
+                          </span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(flexyItem.targetNumberOrContract);
+                              showSuccess('تم نسخ الرقم');
+                            }}
+                            className="text-[10px] px-2 py-0.5 bg-slate-200 hover:bg-slate-300 rounded font-bold cursor-pointer"
+                          >
+                            نسخ
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 block font-semibold">مبلغ الشحن:</span>
+                        <span className="font-black text-emerald-700 text-lg">
+                          {flexyItem.amount} دج
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 block font-semibold">الزبون للتأكيد:</span>
+                        <span className="font-bold text-slate-800">{flexyItem.customerName}</span>
+                        <a href={`tel:${flexyItem.customerPhone}`} className="block font-mono text-slate-500 hover:underline" dir="ltr">
+                          {flexyItem.customerPhone}
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Admin transaction note */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        defaultValue={flexyItem.adminNote || ''}
+                        placeholder="أدخل رقم المعاملة أو ملاحظة الشحن للزبون..."
+                        onBlur={async (e) => {
+                          const val = e.target.value.trim();
+                          if (val !== (flexyItem.adminNote || '')) {
+                            await updateFlexyRequest(flexyItem.id, { adminNote: val });
+                            showSuccess('تم حفظ إشعار الشحن');
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: BILL PAYMENTS */}
+      {activeTab === 'bills' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900">إدارة تسديد الفواتير العمومية</h2>
+                <span className="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 text-xs font-bold rounded-full">
+                  {billsList.length} فاتورة
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">فواتير الكهرباء والغاز سونلغاز، الجزائرية للمياه ADE، الهاتف الثابت والإنترنت</p>
+            </div>
+
+            <button
+              onClick={() => {
+                const headers = ['الرمز المرجعي', 'المرفق', 'رقم الفاتورة / المرجع', 'المبلغ (دج)', 'الزبون', 'الهاتف', 'الحالة', 'التاريخ'];
+                const rows = billsList.map((b) => [
+                  b.referenceCode,
+                  b.billType,
+                  b.billReference,
+                  b.amount,
+                  b.customerName,
+                  b.customerPhone,
+                  b.status,
+                  b.createdAt
+                ]);
+                exportToCsv('maktaba113_bills', headers, rows);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>تصدير CSV</span>
+            </button>
+          </div>
+
+          {/* Search bar */}
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute top-3 start-3.5 pointer-events-none" />
+            <input
+              type="text"
+              value={billsSearchQuery}
+              onChange={(e) => setBillsSearchQuery(e.target.value)}
+              placeholder="البحث بالاسم، الهاتف، رقم الفاتورة أو المرجع..."
+              className="w-full ps-10 pe-4 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+            />
+          </div>
+
+          <div className="space-y-4">
+            {billsList
+              .filter((b) => {
+                if (!billsSearchQuery.trim()) return true;
+                const q = billsSearchQuery.toLowerCase();
+                return (
+                  b.referenceCode.toLowerCase().includes(q) ||
+                  b.billReference.toLowerCase().includes(q) ||
+                  b.customerName.toLowerCase().includes(q) ||
+                  b.customerPhone.includes(q)
+                );
+              })
+              .map((billItem) => (
+                <div key={billItem.id} className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-indigo-100 text-indigo-700 rounded-xl">
+                        <Receipt className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-slate-900 text-sm">{billItem.referenceCode}</span>
+                          <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded font-bold">
+                            {billItem.billType === 'electricity_gas'
+                              ? 'سونلغاز'
+                              : billItem.billType === 'water'
+                              ? 'الجزائرية للمياه ADE'
+                              : billItem.billType === 'landline'
+                              ? 'الهاتف الثابت'
+                              : 'إنترنت اتصالات الجزائر'}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {new Date(billItem.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={billItem.status}
+                        onChange={async (e) => {
+                          const newStatus = e.target.value as FlexyStatus;
+                          await updateBillPayment(billItem.id, { status: newStatus });
+                          await logAdminAction('UPDATE_BILL_STATUS', `Updated ${billItem.referenceCode} to ${newStatus}`, currentUser!.email!, billItem.id);
+                          showSuccess('تم تحديث حالة الفاتورة');
+                        }}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-50 border border-slate-200 cursor-pointer"
+                      >
+                        <option value="new">جديدة (قيد المراجعة)</option>
+                        <option value="processing">جاري التسديد بالوكالة</option>
+                        <option value="completed">تم التسديد وتسليم الوصل ✓</option>
+                        <option value="rejected">مرفوضة / ملغاة</option>
+                      </select>
+
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`هل أنت متأكد من حذف طلب الفاتورة ${billItem.referenceCode}؟`)) {
+                            await deleteBillPayment(billItem.id);
+                            showSuccess('تم الحذف');
+                          }
+                        }}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                        title="حذف"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 p-4 rounded-2xl">
+                    <div>
+                      <span className="text-slate-400 block font-semibold">رقم الفاتورة / المرجع:</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono font-bold text-slate-900">{billItem.billReference}</span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(billItem.billReference);
+                            showSuccess('تم نسخ رقم الفاتورة');
+                          }}
+                          className="text-[10px] px-2 py-0.5 bg-slate-200 hover:bg-slate-300 rounded font-bold cursor-pointer"
+                        >
+                          نسخ
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block font-semibold">مبلغ الفاتورة:</span>
+                      <span className="font-black text-indigo-700 text-lg">{billItem.amount} دج</span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block font-semibold">الزبون:</span>
+                      <span className="font-bold text-slate-800">{billItem.customerName}</span>
+                      <a href={`tel:${billItem.customerPhone}`} className="block font-mono text-slate-500 hover:underline" dir="ltr">
+                        {billItem.customerPhone}
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Attached bill file action */}
+                  {billItem.billFile && (
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-indigo-700" />
+                        <span className="font-medium text-slate-800 truncate max-w-xs">{billItem.billFile.originalName}</span>
+                        <span className="text-slate-400">({formatFileSize(billItem.billFile.size)})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setPreviewFile(billItem.billFile!)}
+                          className="px-2.5 py-1 bg-white hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold border border-indigo-200 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>معاينة</span>
+                        </button>
+                        <button
+                          onClick={() => triggerFileDownload(billItem.billFile!.downloadUrl, billItem.billFile!.originalName)}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>تحميل الملف الأصلي</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Payment receipt note */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      defaultValue={billItem.adminNote || ''}
+                      placeholder="أضف ملاحظة الدفع أو رقم وصل الوكالة..."
+                      onBlur={async (e) => {
+                        const val = e.target.value.trim();
+                        if (val !== (billItem.adminNote || '')) {
+                          await updateBillPayment(billItem.id, { adminNote: val });
+                          showSuccess('تم حفظ ملاحظة التسديد');
+                        }
+                      }}
+                      className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: CUSTOMER INQUIRIES & MESSAGES */}
+      {activeTab === 'messages' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900">رسائل واستفسارات الزبائن</h2>
+                <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
+                  {messagesList.length} رسالة
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">الاستفسارات الواردة عبر نموذج الاتصال المباشر بالموقع</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {messagesList.length === 0 ? (
+              <div className="p-8 bg-white rounded-3xl border border-slate-200 text-center text-slate-400">
+                <MessageSquare className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                <p className="text-sm font-bold">صندوق الرسائل فارغ حالياً</p>
+              </div>
+            ) : (
+              messagesList.map((msg) => (
+                <div key={msg.id} className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+                        <MessageSquare className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{msg.subject || 'بدون موضوع'}</h4>
+                        <span className="text-xs text-slate-500 font-medium">من: {msg.name}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {new Date(msg.createdAt).toLocaleString()}
+                      </span>
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('هل تريد حذف هذه الرسالة؟')) {
+                            await deleteCustomerMessage(msg.id);
+                            showSuccess('تم حذف الرسالة');
+                          }
+                        }}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                        title="حذف"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-slate-700 bg-slate-50 p-4 rounded-2xl leading-relaxed whitespace-pre-wrap">
+                    {msg.message}
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs">
+                    <div className="flex items-center gap-4">
+                      <a href={`tel:${msg.phone}`} className="font-mono text-slate-600 hover:text-emerald-700 font-bold flex items-center gap-1" dir="ltr">
+                        <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{msg.phone}</span>
+                      </a>
+                      {msg.email && (
+                        <a href={`mailto:${msg.email}`} className="font-mono text-slate-600 hover:text-emerald-700 font-bold flex items-center gap-1" dir="ltr">
+                          <Mail className="w-3.5 h-3.5 text-teal-600" />
+                          <span>{msg.email}</span>
+                        </a>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        const newStatus = msg.status === 'replied' ? 'new' : 'replied';
+                        await updateCustomerMessage(msg.id, { status: newStatus, isRead: true });
+                        showSuccess(newStatus === 'replied' ? 'تم تعيين الرسالة كـ "تم الرد"' : 'تم تعيين الرسالة كـ "جديدة"');
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                        msg.status === 'replied' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-600 text-white'
+                      }`}
+                    >
+                      {msg.status === 'replied' ? 'تم الرد ✓' : 'تعيين كـ "تم الرد"'}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 15: SITE SETTINGS */}
       {activeTab === 'settings' && (
         <form
           onSubmit={async (e) => {
@@ -1423,6 +2464,27 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 onChange={(e) => setSettingsForm({ ...settingsForm, workingHours: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
               />
+            </div>
+
+            {/* November 1st Marquee Banner Toggle */}
+            <div className="sm:col-span-2 p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between">
+              <div>
+                <span className="block text-xs font-bold text-emerald-950">
+                  🇩🇿 شريط ذكرى أول نوفمبر المجيدة (المتحرك)
+                </span>
+                <span className="text-[11px] text-emerald-800">
+                  إظهار أو إخفاء شريط التهنئة الوطني المتحرك في أعلى الموقع
+                </span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settingsForm.novemberBannerEnabled !== false}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, novemberBannerEnabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
             </div>
           </div>
 
@@ -1723,6 +2785,40 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         <FilePreviewModal
           file={previewFile}
           onClose={() => setPreviewFile(null)}
+        />
+      )}
+
+      {/* Direct Print Modal with status updater */}
+      {directPrintTarget && (
+        <DirectPrintModal
+          file={directPrintTarget.file}
+          requestInfo={directPrintTarget.requestInfo}
+          onClose={() => setDirectPrintTarget(null)}
+          onStatusUpdate={async (newStatus) => {
+            try {
+              if (directPrintTarget.type === 'print') {
+                await updatePrintRequest(directPrintTarget.reqId, { status: newStatus });
+                await logAdminAction(
+                  'DIRECT_PRINT_STATUS_UPDATE',
+                  `Direct print updated ${directPrintTarget.requestInfo.referenceCode} to ${newStatus}`,
+                  currentUser!.email!,
+                  directPrintTarget.reqId
+                );
+                showSuccess(`تم تحديث حالة طلب الطباعة إلى: ${newStatus === 'ready' ? 'جاهز للاستلام' : 'مكتمل'}`);
+              } else if (directPrintTarget.type === 'research') {
+                await updateResearchRequest(directPrintTarget.reqId, { status: newStatus });
+                await logAdminAction(
+                  'DIRECT_PRINT_STATUS_UPDATE',
+                  `Direct print updated thesis ${directPrintTarget.requestInfo.referenceCode} to ${newStatus}`,
+                  currentUser!.email!,
+                  directPrintTarget.reqId
+                );
+                showSuccess(`تم تحديث حالة المذكرة إلى: ${newStatus === 'ready' ? 'جاهز للاستلام' : 'مكتمل'}`);
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          }}
         />
       )}
 

@@ -147,6 +147,16 @@ export const Footer: React.FC<FooterProps> = ({ siteSettings, onNavigate }) => {
         {/* Bottom Bar */}
         <div className="pt-8 mt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <p>{t('rightsReserved')}</p>
+          
+          <button
+            onClick={() => onNavigate('admin-login')}
+            className="hover:text-emerald-400 transition-colors flex items-center gap-1.5 text-xs text-slate-500"
+            title="بوابة دخول الإدارة"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-slate-600 hover:text-emerald-500" />
+            <span>بوابة الإدارة (Maktaba113)</span>
+          </button>
+
           <div className="flex items-center gap-1 text-slate-400">
             <span>منصة متكاملة بنيت بكل</span>
             <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 inline" />

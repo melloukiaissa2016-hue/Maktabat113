@@ -193,12 +193,27 @@ export const PrintOrderView: React.FC<PrintOrderViewProps> = ({ onNavigate }) =>
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
       {/* Title */}
-      <div className="bg-gradient-to-r from-emerald-800 to-teal-700 rounded-3xl p-6 sm:p-10 text-white shadow-lg">
+      <div 
+        className="rounded-3xl p-6 sm:p-10 text-white shadow-lg hero-gradient"
+        style={{
+          backgroundColor: '#064e3b',
+          backgroundImage: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #0f766e 100%)',
+          color: '#ffffff'
+        }}
+      >
         <div className="flex items-center gap-3 mb-2">
-          <Printer className="w-8 h-8 text-emerald-300" />
-          <h1 className="text-2xl sm:text-3xl font-black">{t('printTitle')}</h1>
+          <Printer className="w-8 h-8 text-[#34d399]" />
+          <h1 
+            className="text-2xl sm:text-3xl font-black"
+            style={{ color: '#ffffff', textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' }}
+          >
+            {t('printTitle')}
+          </h1>
         </div>
-        <p className="text-emerald-100 text-xs sm:text-base max-w-2xl leading-relaxed">
+        <p 
+          className="text-xs sm:text-base max-w-2xl leading-relaxed font-semibold"
+          style={{ color: '#ecfdf5', textShadow: '0 1px 3px rgba(0, 0, 0, 0.3)' }}
+        >
           {t('printDesc')}
         </p>
       </div>

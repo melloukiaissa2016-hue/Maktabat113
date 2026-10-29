@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ShoppingBag, Check, SlidersHorizontal } from 'lucide-react';
+import { Search, ShoppingBag, Check, SlidersHorizontal, X, ChevronRight, ChevronLeft, Eye } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { Product } from '../types';
@@ -17,6 +17,8 @@ export const ShopView: React.FC<ShopViewProps> = ({ products, onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'default' | 'priceAsc' | 'priceDesc'>('default');
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const [selectedGalleryProduct, setSelectedGalleryProduct] = useState<Product | null>(null);
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState<number>(0);
 
   const categories = [
     { id: 'all', label: t('cat_all') },
@@ -149,25 +151,44 @@ export const ShopView: React.FC<ShopViewProps> = ({ products, onNavigate }) => {
             const isJustAdded = justAddedId === product.id;
             const displayName = language === 'fr' && product.nameFr ? product.nameFr : (language === 'en' && product.nameEn ? product.nameEn : product.name);
             const displayDesc = language === 'fr' && product.descriptionFr ? product.descriptionFr : (language === 'en' && product.descriptionEn ? product.descriptionEn : product.description);
+            const allImages = [product.imageUrl, ...(product.additionalImages || [])].filter(Boolean);
 
             return (
               <div
                 key={product.id}
                 className="bg-white rounded-3xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-xl hover:border-emerald-500/40 transition-all duration-200 flex flex-col justify-between group"
               >
-                {/* Image */}
-                <div className="relative aspect-square overflow-hidden bg-slate-50">
-                  <img
-                    src={product.imageUrl}
-                    alt={displayName}
-                    loading="lazy"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+                {/* Image & Gallery trigger */}
+                <div 
+                  onClick={() => allImages.length > 0 && setSelectedGalleryProduct(product)}
+                  className={`relative aspect-square overflow-hidden bg-slate-100 flex items-center justify-center ${allImages.length > 0 ? 'cursor-pointer' : ''}`}
+                >
+                  {product.imageUrl ? (
+                    <img
+                      src={product.imageUrl}
+                      alt={displayName}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="text-center p-4 text-slate-400 flex flex-col items-center justify-center gap-2">
+                      <ShoppingBag className="w-10 h-10 stroke-[1.5]" />
+                      <span className="text-xs font-bold text-slate-500">لا توجد صورة لهذا المنتج</span>
+                    </div>
+                  )}
+
+                  {allImages.length > 1 && (
+                    <span className="absolute top-3 start-3 px-2 py-0.5 bg-black/60 text-white text-[10px] font-bold rounded-md backdrop-blur-xs">
+                      📷 {allImages.length} صور
+                    </span>
+                  )}
+
                   {hasDiscount && (
                     <span className="absolute top-3 end-3 px-2.5 py-1 bg-rose-500 text-white text-xs font-black rounded-lg shadow-sm">
                       تخفيض
                     </span>
                   )}
+
                   {isOutOfStock ? (
                     <span className="absolute bottom-3 start-3 px-2.5 py-1 bg-slate-900/80 text-white text-xs font-bold rounded-lg backdrop-blur-xs">
                       {t('outOfStock')}
@@ -207,7 +228,7 @@ export const ShopView: React.FC<ShopViewProps> = ({ products, onNavigate }) => {
                     <button
                       onClick={() => handleAddToCart(product)}
                       disabled={isOutOfStock}
-                      className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all duration-150 flex items-center justify-center gap-2 ${
+                      className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer ${
                         isOutOfStock
                           ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                           : isJustAdded
@@ -256,12 +277,87 @@ export const ShopView: React.FC<ShopViewProps> = ({ products, onNavigate }) => {
           </div>
           <button
             onClick={() => onNavigate('cart')}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-bold text-xs sm:text-sm transition-colors"
+            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-bold text-xs sm:text-sm transition-colors cursor-pointer"
           >
             إتمام الطلب الآن
           </button>
         </div>
       )}
+
+      {/* Multi-Photo Zoom Gallery Modal */}
+      {selectedGalleryProduct && (() => {
+        const images = [selectedGalleryProduct.imageUrl, ...(selectedGalleryProduct.additionalImages || [])].filter(Boolean);
+        const curImg = images[activeGalleryIndex] || images[0];
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-3xl w-full p-4 sm:p-6 text-white space-y-4 shadow-2xl flex flex-col max-h-[92vh]">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="truncate">
+                  <h3 className="font-black text-base sm:text-lg truncate">{selectedGalleryProduct.name}</h3>
+                  <span className="text-xs text-slate-400">
+                    صورة {activeGalleryIndex + 1} من {images.length}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedGalleryProduct(null);
+                    setActiveGalleryIndex(0);
+                  }}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5 text-slate-300" />
+                </button>
+              </div>
+
+              {/* Main Zoom Display */}
+              <div className="relative flex-1 min-h-[280px] sm:min-h-[420px] bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center p-2">
+                <img
+                  src={curImg}
+                  alt={selectedGalleryProduct.name}
+                  className="max-h-[60vh] max-w-full object-contain rounded-lg transition-transform duration-200"
+                />
+
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setActiveGalleryIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))}
+                      className="absolute start-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors cursor-pointer"
+                    >
+                      <ChevronRight className="w-6 h-6 rtl:rotate-180" />
+                    </button>
+                    <button
+                      onClick={() => setActiveGalleryIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))}
+                      className="absolute end-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft className="w-6 h-6 rtl:rotate-180" />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Thumbnails strip */}
+              {images.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none justify-center">
+                  {images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveGalleryIndex(idx)}
+                      className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                        activeGalleryIndex === idx
+                          ? 'border-emerald-500 scale-105 shadow-md'
+                          : 'border-slate-700 opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={img} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
